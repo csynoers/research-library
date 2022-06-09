@@ -1,0 +1,13 @@
+{
+    "name": "GeneratePDF",
+    "alias": "generatepdf",
+    "description": "",
+    "keywords": [],
+    "priority": 0,
+    "providers": [
+        "Modules\\GeneratePDF\\Providers\\GeneratePDFServiceProvider"
+    ],
+    "aliases": {},
+    "files": [],
+    "requires": []
+}
