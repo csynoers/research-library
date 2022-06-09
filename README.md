@@ -1,1 +1,3 @@
-"# research-library" 
+# research-library:
+
+DOMPDF
