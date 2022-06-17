@@ -14,3 +14,6 @@
 Route::get('/', function () {
     return view('welcome');
 });
+Route::group(['prefix' => 'laravel-filemanager', 'middleware' => []], function () {
+ \UniSharp\LaravelFilemanager\Lfm::routes();
+});

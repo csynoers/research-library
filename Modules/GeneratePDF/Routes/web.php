@@ -14,3 +14,4 @@
 Route::prefix('generatepdf')->group(function() {
     Route::get('/', 'GeneratePDFController@index');
 });
+

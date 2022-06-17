@@ -5,62 +5,100 @@ namespace Modules\GeneratePDF\Http\Controllers;
 use Illuminate\Contracts\Support\Renderable;
 use Illuminate\Http\Request;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Filesystem\Filesystem;
 
 use PDF;
 use PDFMerger;
 use setasign\Fpdi\Fpdi;
 //use setasign\Fpdi\PdfReader;
-use NcJoes\OfficeConverter\OfficeConverter;
+use Exception;
 
-class GeneratePDFController extends Controller
-{
-    public $filesPDF;
-    public $oMerger;
-    /**
-     * Display a listing of the resource.
-     * @return Renderable
-     */
-    public function index(Request $request)
+class MergePDF {
+    protected $type;
+    protected $files;
+    protected $oMerger;
+    protected $fileFiltered;
+    protected $temporaryPath;
+
+    public function __construct( $files )
     {
-        if ( $request->merge ) {
-            $this->merger()
-                 ->mergedPDF($request->pdf_portrait)
-                 ->mergedPDF($request->pdf_landscape)
-                 ->mergedPDF($request->pdf_landscape_portrait)
-                 ->mergedPDF('doc/portrait.docx', 'doc')
-                 ->mergedPDF('doc/landscape.docx', 'doc')
-                 ->mergedPDF('doc/landscape_portrait.docx', 'doc')
-                 ->stream();
+        $this->files = $files;
+        $this->filterType = [
+            'image/jpeg',
+            'image/png',
 
-        }
-        
-        return view('generatepdf::index');
+            'application/pdf',
+            'application/msword',
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'application/vnd.ms-excel',
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/vnd.ms-powerpoint',
+            'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        ];
+
+        $this->filterFile();
     }
 
-
-
-    // Merge PDF
-    public function merger()
-    {
-        $this->oMerger = PDFMerger::init();
-
-        return $this;
-    }
     public function stream()
     {
-        $this->oMerger->merge();
-
-        return $this->oMerger->stream();
-    }
-    public function mergedPDF( $fileName , $type=false)
-    {
-        if ( $type ) {
-            if ( $type == 'doc' ) {
-                $this->convertWordToPDF($fileName);
-                $fileName = $this->getNameFileNoExtension($fileName).'.pdf';
-            }
+        $this->oMerger();
+        try {
+            return $this->oMerger->stream();
         }
 
+        catch (Exception $e) {}
+    }
+
+    protected function oMerger()
+    {
+        try {
+            $this->oMerger = PDFMerger::init();
+
+            foreach ($this->filterFile as $file) {
+               $this->addPdf($file); 
+            } 
+            $this->oMerger->merge();
+
+            //remove temporary file
+            //$file = new Filesystem;
+            //dd($file->cleanDirectory(Storage::path($this->temporaryPath)));
+        }
+
+        catch (Exception $e) {
+            echo ($e->getMessage());
+        }
+
+    }
+
+    protected function filterFile()
+    {
+        $this->filterFile = [];
+
+        $this->temporaryPath = '/public/tmp/' .date('Y-m-d h-i-s');
+        Storage::makeDirectory($this->temporaryPath);
+
+
+        foreach ($this->files as $file) {
+            $mimeType = Storage::getMimeType($file);
+            if ( in_array($mimeType, $this->filterType) ) {
+                if ($mimeType != 'application/pdf') {
+                    $temporaryFileName = $this->temporaryPath .'/' .pathinfo($file, PATHINFO_FILENAME).'.pdf';
+
+                    exec('soffice --headless --convert-to pdf "'.Storage::path($file).'" --outdir "'.Storage::path($this->temporaryPath) .'" ' );
+
+                    $file = $temporaryFileName;
+                }
+
+                $this->filterFile[] = $file;
+            
+            }
+        }
+    }
+
+    public function addPdf( $fileName )
+    {
+        $fileName = (Storage::path($fileName));
         $pdf = new Fpdi();
 
         // set the source file
@@ -85,68 +123,34 @@ class GeneratePDFController extends Controller
 
         }
             
-        return $this;
     }
 
+}
 
+class ConvertFilesToPDF {
 
+}
 
-
-    /* Convert Word To PDF
+class GeneratePDFController extends Controller
+{
+    /**
+     * Display a listing of the resource.
+     * @return Renderable
      */
-    public function convertWordToPDF($fileName)
+    public function index(Request $request)
     {
-        $converter = new OfficeConverter($fileName);
-        $converter->convertTo(public_path('output-file.pdf'));
-        dd($converter);
-
-        $fileNameNoExtension = $this->getNameFileNoExtension($fileName);
-
-        /* Set the PDF Engine Renderer Path */
-        $domPdfPath = base_path('vendor/dompdf/dompdf');
-        \PhpOffice\PhpWord\Settings::setPdfRendererPath($domPdfPath);
-        \PhpOffice\PhpWord\Settings::setPdfRendererName('DomPDF');
-         
-        /*@ Reading doc file */
-        //$template = new\PhpOffice\PhpWord\TemplateProcessor(public_path($fileName));
- 
-        /*@ Replacing variables in doc file */
-        //$template->setValue('date', date('d-m-Y'));
-        //$template->setValue('title', 'Mr.');
-        //$template->setValue('firstname', 'Scratch');
-        //$template->setValue('lastname', 'Coder');
-
-        /*@ Save Temporary Word File With New Name */
-        //$saveDocPath = public_path($fileNameNoExtension.'.docx');
-        //$template->saveAs($saveDocPath);
-         
-        // Load temporarily create word file
-        //$Content = \PhpOffice\PhpWord\IOFactory::load($saveDocPath); 
-        $Content = \PhpOffice\PhpWord\IOFactory::load($fileName); 
- 
-        //Save it into PDF
-        $savePdfPath = public_path($fileNameNoExtension.'.pdf');
- 
-        /*@ If already PDF exists then delete it */
-        //if ( file_exists($savePdfPath) ) {
-        //    unlink($savePdfPath);
-        //}
- 
-        //Save it into PDF
-        $PDFWriter = \PhpOffice\PhpWord\IOFactory::createWriter($Content,'PDF');
-        $PDFWriter->save($savePdfPath); 
-       // echo 'File has been successfully converted';
- 
-        /*@ Remove temporarily created word file */
-        //if ( file_exists($saveDocPath) ) {
-        //    unlink($saveDocPath);
-        //}
+        //$src = fopen('https://pslb3.menlhk.go.id/internal/uploads/pengumuman/1545111808_contoh-pdf.pdf', 'r');
+        //$dest1 = fopen('storage/files/Merge to PDF/first1k.pdf', 'w');
+        //dump(file_put_contents($src));
+        $allFiles = Storage::files('public/files/Merge to PDF');
+        //dd($allFiles);
+        //$allFiles[] = 'https://pslb3.menlhk.go.id/internal/uploads/pengumuman/1545111808_contoh-pdf.pdf';
+        $merge = new MergePDF($allFiles);
+        $merge->stream();
+        
+        //return view('generatepdf::index');
     }
 
-    public function getNameFileNoExtension($fileName)
-    {
-        return preg_replace('/\\.[^.\\s]{3,4}$/', '', $fileName);
-    }
 
 
 

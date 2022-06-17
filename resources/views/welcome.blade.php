@@ -85,7 +85,8 @@
                 </div>
 
                 <div class="links">
-                    <a href="generatepdf">Generate PDF</a>
+                    <a href="laravel-filemanager" target="_blank">File Manager</a>
+                    <a href="generatepdf" target="_blank">Generate PDF</a>
                 </div>
             </div>
         </div>
